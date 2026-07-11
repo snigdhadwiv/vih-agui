@@ -1,0 +1,37 @@
+:root {
+  --color-bg: #0f1216;
+  --color-surface: #171b22;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-text: #e7eaee;
+  --color-muted: #8b93a1;
+  --color-accent: #5eead4;
+  --color-positive: #4ade80;
+  --color-negative: #f87171;
+  --radius-md: 14px;
+  --font-sans: -apple-system, "Inter", "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.dashboard-header {
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  padding: 24px 28px;
+}
+
+.dashboard-section {
+  padding: 0 28px 28px;
+}

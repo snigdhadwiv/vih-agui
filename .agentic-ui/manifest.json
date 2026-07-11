@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-07-07T06:35:00.000Z",
+  "framework": "vanilla",
+  "packageManager": "npm",
+  "chartLibraries": [],
+  "tableLibraries": [],
+  "uiKits": [],
+  "styling": {
+    "--brand": "#3b82f6",
+    "--bg": "#0f1216",
+    "--card": "#171b22",
+    "--text": "#e7eaee",
+    "--muted": "#8b93a1"
+  },
+  "apiEndpoints": [],
+  "components": [
+    {
+      "path": "examples/plain-html-dashboard/index.html",
+      "exports": [],
+      "tags": ["card", "kpi", "table", "chart"],
+      "sizeBytes": 2483
+    }
+  ],
+  "componentCount": 1
+}

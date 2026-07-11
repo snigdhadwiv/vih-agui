@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Revenue Dashboard — React example</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+
+  <!-- Agentic UI: floating AI agent. Vendored copy in public/vendor so Vite
+       serves it as a static passthrough regardless of dev-server root. In a
+       real project, `npx agentic-ui init` points this at
+       /node_modules/agentic-ui instead — see the top-level README. -->
+  <script type="module" src="/vendor/agentic-widget.js"></script>
+  <agentic-ui-agent endpoint="http://localhost:4411"></agentic-ui-agent>
+</body>
+</html>
