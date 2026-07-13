@@ -21,22 +21,22 @@
    ===================================================================== */
 
 const C = {
-  bg:        "#f8fafc",
-  bgPanel:   "#ffffff",
-  surface:   "#ffffff",
-  surface2:  "#f1f5f9",
-  surface3:  "#e2e8f0",
-  accent:    "#8b5cf6",
-  blue:      "#6366f1",
-  purple:    "#a855f7",
+  bg:        "transparent",
+  bgPanel:   "rgba(255, 255, 255, 0.75)",
+  surface:   "rgba(255, 255, 255, 0.65)",
+  surface2:  "rgba(241, 245, 249, 0.5)",
+  surface3:  "rgba(226, 232, 240, 0.4)",
+  accent:    "#000000",
+  blue:      "#333333",
+  purple:    "#666666",
   amber:     "#f59e0b",
   rose:      "#ef4444",
-  green:     "#22c55e",
+  green:     "#10b981",
   orange:    "#f97316",
-  text:      "#000000",
-  muted:     "#334155",
-  border:    "rgba(0,0,0,0.08)",
-  borderHov: "rgba(0,0,0,0.14)",
+  text:      "#0f172a",
+  muted:     "#64748b",
+  border:    "rgba(0,0,0,0.06)",
+  borderHov: "rgba(0,0,0,0.12)",
 };
 
 const PALETTE = [
@@ -1149,12 +1149,14 @@ class AnalyticsPanel {
       inset:      "0",
       zIndex:     "2147483002",
       background: C.bgPanel,
+      backdropFilter: "blur(24px)",
+      WebkitBackdropFilter: "blur(24px)",
       fontFamily: FONT,
       display:    "flex",
       flexDirection: "column",
       overflow:   "hidden",
       transform:  "translateY(100%)",
-      transition: "transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)",
+      transition: "transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)",
     });
     document.body.appendChild(el);
     this._el = el;
@@ -1203,15 +1205,15 @@ class AnalyticsPanel {
     this._el.innerHTML = `
       <!-- ═══ HEADER ═══ -->
       <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
-        padding:0 24px;height:60px;
-        background:linear-gradient(135deg,${C.surface2} 0%,${C.surface3} 100%);
-        border-bottom:1px solid ${C.border}">
+        padding:0 24px;height:64px;
+        background:transparent;
+        border-bottom:1px solid rgba(0,0,0,0.05)">
         
         <button id="__au-back__" style="display:flex;align-items:center;gap:8px;
-          background:rgba(0,0,0,0.06);border:1px solid ${C.border};
-          color:${C.text};font-size:13px;font-weight:500;
-          padding:7px 14px;border-radius:10px;cursor:pointer;
-          transition:background .15s;font-family:${FONT}">
+          background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.06);
+          color:${C.text};font-size:13px;font-weight:600;
+          padding:8px 16px;border-radius:12px;cursor:pointer;
+          transition:background .2s, transform .1s;font-family:${FONT}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <path d="M19 12H5M12 5l-7 7 7 7"/>
           </svg>
@@ -1394,25 +1396,28 @@ const BUBBLE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   .bubble {
-    width: 58px; height: 58px; border-radius: 50%;
-    background: linear-gradient(135deg, ${C.accent} 0%, ${C.blue} 100%);
+    width: 56px; height: 56px; border-radius: 50%;
+    background: #000000;
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; border: none;
-    box-shadow: 0 8px 28px rgba(94,234,212,0.35), 0 4px 12px rgba(0,0,0,0.45);
-    transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+    cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15);
+    transition: transform .4s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow .3s ease;
   }
-  .bubble:hover { transform: scale(1.1); box-shadow: 0 12px 36px rgba(94,234,212,0.45); }
-  .bubble svg  { width: 26px; height: 26px; }
+  .bubble:hover { transform: scale(1.08); box-shadow: 0 12px 36px rgba(0,0,0,0.3); }
+  .bubble svg  { width: 24px; height: 24px; color: #ffffff; }
 
   .mini-panel {
-    position: absolute; bottom: 70px; right: 0;
-    width: 360px; max-width: calc(100vw - 32px);
-    background: ${C.surface}; border-radius: 18px;
-    border: 1px solid ${C.borderHov};
-    box-shadow: 0 20px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.04);
+    position: absolute; bottom: 76px; right: 0;
+    width: 380px; max-width: calc(100vw - 32px);
+    background: ${C.bgPanel};
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
     overflow: hidden;
-    opacity: 0; transform: translateY(10px) scale(.97); pointer-events: none;
-    transition: opacity .2s ease, transform .2s cubic-bezier(.34,1.56,.64,1);
+    opacity: 0; transform: translateY(20px) scale(0.95); pointer-events: none;
+    transition: opacity .3s ease, transform .4s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .mini-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: all; }
 
