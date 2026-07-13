@@ -462,7 +462,7 @@ function renderHorizontalBarChart(spec) {
   const bars=data.map((d,i)=>{
     const bw=((+d.value||0)/maxV)*cw;
     const y=(p.t+i*gap+(gap-barH)/2).toFixed(1);
-    return `<rect x="${p.l}" y="${y}" width="${bw.toFixed(1)}" height="${barH.toFixed(1)}" rx="4" fill="${color}" opacity="0.85"/>
+    return `<rect class="au-viz-element" data-tooltip="${esc(d.label)}: ${fmtVal(d.value)}" x="${p.l}" y="${y}" width="${bw.toFixed(1)}" height="${barH.toFixed(1)}" rx="4" fill="${color}" opacity="0.85"/>
     <text x="${p.l-8}" y="${+y+barH/2+4}" fill="${C.muted}" font-size="9" text-anchor="end">${esc(d.label)}</text>
     <text x="${p.l+bw+8}" y="${+y+barH/2+4}" fill="${color}" font-size="9" font-weight="600">${fmtVal(d.value)}</text>`;
   }).join("");
@@ -484,7 +484,7 @@ function renderStackedBarChart(spec) {
     const x=(p.l+i*gap+(gap-barW)/2).toFixed(1);
     d.stacks.forEach((s,si)=>{
       const bh=((+s.value||0)/maxV)*ch; cy-=bh;
-      str+=`<rect x="${x}" y="${cy.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${PALETTE[si%PALETTE.length]}" opacity="0.85"/>`;
+      str+=`<rect class="au-viz-element" data-tooltip="${esc(d.label)} - ${esc(s.name||'Item')}: ${fmtVal(s.value)}" x="${x}" y="${cy.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${PALETTE[si%PALETTE.length]}" opacity="0.85"/>`;
     });
     return str+`<text x="${(+x+barW/2).toFixed(1)}" y="${(p.t+ch+18).toFixed(1)}" fill="${C.muted}" font-size="9" text-anchor="middle">${esc(d.label)}</text>`;
   }).join("");
@@ -504,7 +504,7 @@ function renderGroupedBarChart(spec) {
     let str=`<text x="${cx.toFixed(1)}" y="${(p.t+ch+18).toFixed(1)}" fill="${C.muted}" font-size="9" text-anchor="middle">${esc(d.label)}</text>`;
     d.groups.forEach((g,gi)=>{
       const bh=((+g.value||0)/maxV)*ch, x=cx - (gCount*barW)/2 + gi*barW, y=p.t+ch-bh;
-      str+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW-1).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${PALETTE[gi%PALETTE.length]}" opacity="0.85"/>`;
+      str+=`<rect class="au-viz-element" data-tooltip="${esc(d.label)} - ${esc(g.name||'Item')}: ${fmtVal(g.value)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW-1).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${PALETTE[gi%PALETTE.length]}" opacity="0.85"/>`;
     });
     return str;
   }).join("");
@@ -1330,10 +1330,44 @@ class AnalyticsPanel {
           </button>
         </div>
       </div>
+
+      <!-- ═══ TOOLTIP ═══ -->
+      <div id="__au-tooltip__" style="position:fixed;display:none;background:rgba(0,0,0,0.85);color:#fff;
+        padding:6px 12px;border-radius:6px;font-size:12px;font-family:${FONT};pointer-events:none;
+        z-index:2147483005;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2);transform:translate(-50%, -100%);margin-top:-8px;
+        transition: opacity 0.1s; opacity: 0;">
+      </div>
     `;
 
     // Event bindings
     this._el.querySelector("#__au-back__").onclick = () => this.close();
+    
+    // Tooltip logic
+    const tooltip = this._el.querySelector("#__au-tooltip__");
+    this._el.addEventListener('mouseover', e => {
+      const target = e.target.closest('.au-viz-element');
+      if (target) {
+        const text = target.getAttribute('data-tooltip');
+        if (text) {
+          tooltip.innerHTML = text;
+          tooltip.style.display = 'block';
+          setTimeout(() => tooltip.style.opacity = '1', 10);
+        }
+      }
+    });
+    this._el.addEventListener('mousemove', e => {
+      if (tooltip.style.display === 'block') {
+        tooltip.style.left = e.clientX + 'px';
+        tooltip.style.top = e.clientY + 'px';
+      }
+    });
+    this._el.addEventListener('mouseout', e => {
+      const target = e.target.closest('.au-viz-element');
+      if (target) {
+        tooltip.style.opacity = '0';
+        setTimeout(() => { if(tooltip.style.opacity === '0') tooltip.style.display = 'none'; }, 100);
+      }
+    });
     
     // Bind click events to history items
     this._el.querySelectorAll(".au-history-item").forEach(el => {
