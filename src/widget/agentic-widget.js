@@ -1146,17 +1146,23 @@ class AnalyticsPanel {
     el.id = "__au-analytics-panel__";
     Object.assign(el.style, {
       position:   "fixed",
-      inset:      "0",
+      top:        "0",
+      bottom:     "0",
+      right:      "0",
+      width:      "50vw",
+      minWidth:   "450px",
       zIndex:     "2147483002",
       background: C.bgPanel,
       backdropFilter: "blur(24px)",
       WebkitBackdropFilter: "blur(24px)",
+      borderLeft: "1px solid rgba(255,255,255,0.5)",
+      boxShadow:  "-10px 0 30px rgba(0,0,0,0.1)",
       fontFamily: FONT,
       display:    "flex",
       flexDirection: "column",
       overflow:   "hidden",
-      transform:  "translateY(100%)",
-      transition: "transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)",
+      transform:  "translateX(100%)",
+      transition: "transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)",
     });
     document.body.appendChild(el);
     this._el = el;
@@ -1171,9 +1177,9 @@ class AnalyticsPanel {
 
     if (!this._visible) {
       this._visible = true;
-      // Trigger slide-up animation
+      // Trigger slide-in animation
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => { this._el.style.transform = "translateY(0)"; });
+        requestAnimationFrame(() => { this._el.style.transform = "translateX(0)"; });
       });
       this._agent._open = false; // close the mini bubble panel
       this._agent._render();
@@ -1189,7 +1195,7 @@ class AnalyticsPanel {
   /* ---- Close → slide panel back down ---- */
   close() {
     if (!this._el) return;
-    this._el.style.transform = "translateY(100%)";
+    this._el.style.transform = "translateX(100%)";
     this._visible = false;
     this._agent._render(); // restore bubble
   }
