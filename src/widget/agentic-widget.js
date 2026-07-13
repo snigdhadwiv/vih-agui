@@ -1281,7 +1281,11 @@ class AnalyticsPanel {
           </button>
           <div id="${historyId}-content" style="display:none;display:flex;flex-direction:column;gap:12px">
             ${prevItems.slice().reverse().map((item, i) => `
-              <div style="background:${C.surface};border:1px solid ${C.border};border-radius:12px;padding:16px">
+              <div class="au-history-item" data-index="${prevItems.length - 1 - i}" 
+                style="background:${C.surface};border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;cursor:pointer;
+                transition:transform .15s, background .15s, box-shadow .15s"
+                onmouseover="this.style.background='rgba(255,255,255,0.85)';this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" 
+                onmouseout="this.style.background='${C.surface}';this.style.transform='translateY(0)';this.style.boxShadow='none'">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
                   <span style="font-size:11px;color:${C.muted}">Q</span>
                   <span style="font-size:13px;color:${C.text};font-weight:500">${esc(item.prompt)}</span>
@@ -1320,7 +1324,7 @@ class AnalyticsPanel {
             border:none;border-radius:10px;width:38px;height:38px;flex-shrink:0;
             display:flex;align-items:center;justify-content:center;
             cursor:pointer;transition:transform .15s">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.8)" stroke-width="2.5" stroke-linecap="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" stroke-linecap="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
@@ -1330,6 +1334,20 @@ class AnalyticsPanel {
 
     // Event bindings
     this._el.querySelector("#__au-back__").onclick = () => this.close();
+    
+    // Bind click events to history items
+    this._el.querySelectorAll(".au-history-item").forEach(el => {
+      el.onclick = () => {
+        const idx = parseInt(el.getAttribute("data-index"), 10);
+        const item = this._history[idx];
+        if (item) {
+          // Move the clicked item to the end of the history array to make it the 'latest'
+          this._history.splice(idx, 1);
+          this._history.push(item);
+          this._renderPanel(); // Re-render everything with the new latest item
+        }
+      };
+    });
 
     const textarea = this._el.querySelector(`#${composerId}`);
     const sendBtn  = this._el.querySelector(`#${composerId}-send`);
