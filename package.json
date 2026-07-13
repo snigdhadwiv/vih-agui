@@ -1,29 +1,29 @@
 {
-    "name":  "vih-agui",
-    "version":  "1.0.0",
-    "description":  "Drop-in AI agent for your web app. Scans your dashboard context and generates text-to-SQL powered visualizations.",
-    "main":  "./index.js",
-    "exports":  {
-                    ".":  "./index.js",
-                    "./client":  "./src/widget/agentic-widget.js"
-                },
-    "license":  "MIT",
-    "files":  [
-                  "index.js",
-                  "src",
-                  "server"
-              ],
-    "scripts":  {
-                    "server":  "node ./server/index.js"
-                },
-    "dependencies":  {
-                         "@anthropic-ai/sdk":  "^0.30.0",
-                         "dotenv":  "^16.4.5"
-                     },
-    "devDependencies":  {
-                            "express":  "^4.19.2"
-                        },
-    "engines":  {
-                    "node":  "\u003e=18"
-                }
+    "name": "vih-agui",
+    "version": "1.0.1",
+    "description": "Drop-in AI agent for your web app. Scans your dashboard context and generates text-to-SQL powered visualizations.",
+    "main": "./index.js",
+    "exports": {
+        ".": "./index.js",
+        "./client": "./src/widget/agentic-widget.js"
+    },
+    "license": "MIT",
+    "files": [
+        "index.js",
+        "src",
+        "server"
+    ],
+    "scripts": {
+        "server": "node ./server/index.js"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.30.0",
+        "dotenv": "^16.4.5"
+    },
+    "devDependencies": {
+        "express": "^4.19.2"
+    },
+    "engines": {
+        "node": ">=18"
+    }
 }
