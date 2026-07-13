@@ -26,9 +26,9 @@ const C = {
   surface:   "rgba(255, 255, 255, 0.65)",
   surface2:  "rgba(241, 245, 249, 0.5)",
   surface3:  "rgba(226, 232, 240, 0.4)",
-  accent:    "#000000",
-  blue:      "#333333",
-  purple:    "#666666",
+  accent:    "#8b5cf6",
+  blue:      "#6366f1",
+  purple:    "#a855f7",
   amber:     "#f59e0b",
   rose:      "#ef4444",
   green:     "#10b981",
@@ -1455,7 +1455,7 @@ const BUBBLE_CSS = `
 
   .bubble {
     width: 56px; height: 56px; border-radius: 50%;
-    background: #000000;
+    background: linear-gradient(135deg, ${C.accent} 0%, ${C.blue} 100%);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
     box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15);
