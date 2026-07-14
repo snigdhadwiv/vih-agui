@@ -1,6 +1,6 @@
 {
     "name": "vih-agui",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "description": "Drop-in AI agent for your web app. Scans your dashboard context and generates text-to-SQL powered visualizations.",
     "main": "./index.js",
     "exports": {
