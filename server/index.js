@@ -22,6 +22,7 @@ const { createAnthropicAdapter } = require("./adapters/anthropic");
 const { createOpenAICompatibleAdapter } = require("./adapters/openai-compatible");
 const { corsMiddleware, authMiddleware, rateLimitMiddleware } = require("./security");
 const { AgenticUIBackend } = require("./core/agent");
+const { DatabaseAdapter } = require("./adapters/db");
 
 const ROOT = process.cwd();
 const PORT = process.env.AGENTIC_UI_PORT || 4411;
@@ -45,85 +46,32 @@ if (PROVIDER === "anthropic") {
 }
 const MOCK = !adapter;
 
-// ---- Mock Database for RLS Demo --------------------------------------
-// In a real app, this would be your Postgres connection + RLS.
-const MOCK_DB_SCHEMA = `
-CREATE TABLE orders (
-  id VARCHAR(10) PRIMARY KEY,
-  customer VARCHAR(50),
-  amount INT,
-  status VARCHAR(20),
-  tenant_id VARCHAR(50) -- RLS field
-);
-CREATE TABLE page_views (
-  path VARCHAR(100),
-  views INT,
-  tenant_id VARCHAR(50) -- RLS field
-);
-`;
+// ---- Configure Database Engine ---------------------------------------
+// The plugin is completely database-agnostic. By changing 'client', you can 
+// connect to PostgreSQL ('pg'), MySQL ('mysql'), or SQLite ('sqlite3').
+const DB_CLIENT = process.env.AGENTIC_UI_DB_CLIENT || "sqlite3";
+const DB_CONNECTION = process.env.AGENTIC_UI_DB_CONNECTION || { filename: ":memory:" };
 
-const mockDbData = {
-  orders: [
-    { id: '#1042', customer: 'Acme Co', amount: 1200, status: 'paid', tenant_id: 'tenantA' },
-    { id: '#1043', customer: 'Globex Corp', amount: 860, status: 'pending', tenant_id: 'tenantA' },
-    { id: '#1044', customer: 'Initech', amount: 2430, status: 'paid', tenant_id: 'tenantA' },
-    { id: '#1045', customer: 'Umbrella Corp', amount: 990, status: 'refunded', tenant_id: 'tenantB' },
-    { id: '#1046', customer: 'Soylent LLC', amount: 1710, status: 'paid', tenant_id: 'tenantB' },
-    { id: '#1047', customer: 'Dunder Mifflin', amount: 540, status: 'pending', tenant_id: 'tenantB' }
-  ],
-  page_views: [
-    { path: '/', views: 1204, tenant_id: 'tenantA' },
-    { path: '/pricing', views: 402, tenant_id: 'tenantA' },
-    { path: '/', views: 300, tenant_id: 'tenantB' }
-  ]
-};
-
-// This simulates the host application's DB execution callback
-// It intercepts the raw SQL and applies RLS filtering based on authContext.
-async function executeQueryMock(sql, authContext) {
-  // Simulate network delay
-  await new Promise(r => setTimeout(r, 300));
-  
-  // Basic naive SQL parsing for demo purposes
-  const sqlLower = sql.toLowerCase();
-  let table = null;
-  if (sqlLower.includes('from orders')) table = 'orders';
-  if (sqlLower.includes('from page_views')) table = 'page_views';
-  
-  if (!table) return []; // Table not found
-
-  // RLS Simulation: We extract the "tenant" from the authContext (which in the demo is just the token)
-  // If no token is provided, default to tenantA for demo purposes
-  const tenantId = (authContext && authContext.token) ? authContext.token : 'tenantA';
-  
-  console.log(`[MockDB] Executing query on ${table} as RLS role: ${tenantId}`);
-
-  // Apply Row-Level Security filter
-  const rlsFilteredData = mockDbData[table].filter(row => row.tenant_id === tenantId);
-
-  // Group by (simplified implementation for demo)
-  if (sqlLower.includes('group by status')) {
-    const grouped = {};
-    for (const r of rlsFilteredData) {
-      grouped[r.status] = (grouped[r.status] || 0) + 1;
-    }
-    return Object.keys(grouped).map(k => ({ status: k, count: grouped[k] }));
-  }
-
-  return rlsFilteredData;
+let dbAdapter = null;
+if (process.env.AGENTIC_UI_ENABLE_DB !== "false") {
+  dbAdapter = new DatabaseAdapter({
+    client: DB_CLIENT,
+    connection: DB_CONNECTION
+  });
+  console.log(`[Server] Database Adapter initialized for ${DB_CLIENT}`);
 }
 
-const mockDbConfig = {
-  schema: MOCK_DB_SCHEMA,
-  executeQuery: executeQueryMock
-};
+const realDbConfig = dbAdapter ? {
+  getSchema: () => dbAdapter.getSchemaDDL(),
+  executeQuery: (sql, authContext) => dbAdapter.executeQuery(sql, authContext)
+} : null;
 
 // Initialize Core Pipeline
 let backend = null;
 if (!MOCK) {
   backend = new AgenticUIBackend({
     llmAdapter: adapter,
-    db: mockDbConfig // Enable Text-to-SQL + RLS
+    db: realDbConfig // Enable Real Text-to-SQL + Security Guardrails
   });
 }
 

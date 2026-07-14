@@ -35,10 +35,14 @@ class AgenticUIBackend {
     let sqlQuery = null;
 
     // STAGE 1: If database integration is enabled, attempt to generate and run SQL
-    if (this.db && this.db.schema && typeof this.db.executeQuery === "function") {
+    if (this.db && typeof this.db.executeQuery === "function") {
       try {
         console.log(`[AgenticUI] Analyzing prompt for SQL generation...`);
-        const result = await this.adapter.generateSql(prompt, this.db.schema, history);
+        // Dynamically fetch schema if a function is provided, else fallback to static string
+        const schema = typeof this.db.getSchema === "function" ? await this.db.getSchema() : this.db.schema;
+        
+        if (schema) {
+          const result = await this.adapter.generateSql(prompt, schema, history);
         
         if (result && result.sql) {
           sqlQuery = result.sql;
