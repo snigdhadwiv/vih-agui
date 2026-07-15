@@ -1,21 +1,81 @@
 /**
  * Agentic UI Backend — Core Pipeline
- * 
+ *
  * Manages the Text-to-SQL + Viz-Spec generation pipeline.
- * Designed to be easily packaged and integrated into any host app.
+ * 
+ * Upgrades in this version:
+ *   - Self-Healing SQL Loop: If generated SQL fails, the error is fed back
+ *     to the LLM silently to auto-correct. Retries up to MAX_SQL_RETRIES times.
+ *   - The user never sees a SQL error — only the final successful result.
  */
+
+const MAX_SQL_RETRIES = 3;
 
 class AgenticUIBackend {
   /**
    * @param {Object} config
    * @param {Object} config.llmAdapter - e.g. openai-compatible or anthropic adapter
    * @param {Object} [config.db] - Optional Text-to-SQL integration
-   * @param {string} [config.db.schema] - DDL schema to provide to the LLM
+   * @param {Function} [config.db.getSchema] - Async function returning DDL string
    * @param {Function} [config.db.executeQuery] - Async function(sql, authContext) returning rows
    */
   constructor({ llmAdapter, db = null }) {
     this.adapter = llmAdapter;
     this.db = db;
+  }
+
+  /**
+   * Self-Healing SQL Execution Loop
+   * Attempts to generate and execute SQL, retrying on failure.
+   * On each retry, feeds the specific error back to the LLM so it can self-correct.
+   *
+   * @param {string} prompt - Original user prompt
+   * @param {string} schema - Database DDL schema
+   * @param {Array} history - Conversation history
+   * @param {Object} authContext - RLS auth context
+   * @returns {{ sql: string, rows: Array } | null}
+   */
+  async _executeWithSelfHealing(prompt, schema, history, authContext) {
+    let lastError = null;
+    let correctionHint = null;
+
+    for (let attempt = 1; attempt <= MAX_SQL_RETRIES; attempt++) {
+      try {
+        console.log(`[AgenticUI] SQL Attempt ${attempt}/${MAX_SQL_RETRIES}...`);
+
+        // On retry, include the previous error in the generation prompt
+        // so the LLM can understand what went wrong and self-correct
+        const result = await this.adapter.generateSql(
+          prompt,
+          schema,
+          history,
+          correctionHint  // null on first attempt, error message on retries
+        );
+
+        if (!result || !result.sql) {
+          console.log(`[AgenticUI] LLM decided no SQL is needed. Using frontend context only.`);
+          return null;
+        }
+
+        const sql = result.sql;
+        console.log(`[AgenticUI] Generated SQL: ${sql}`);
+
+        // Attempt execution — throws if security validation or DB fails
+        const rows = await this.db.executeQuery(sql, authContext);
+        console.log(`[AgenticUI] ✅ SQL executed successfully. Returned ${rows.length} rows.`);
+
+        return { sql, rows };
+
+      } catch (err) {
+        lastError = err;
+        correctionHint = `Your previous SQL query failed with this error: "${err.message}". Please analyze the schema again carefully and generate a corrected SELECT query that avoids this issue.`;
+        console.warn(`[AgenticUI] ⚠️ SQL Attempt ${attempt} failed: ${err.message}. ${attempt < MAX_SQL_RETRIES ? 'Retrying...' : 'All retries exhausted.'}`);
+      }
+    }
+
+    // All retries exhausted — log and gracefully fall back to frontend context
+    console.error(`[AgenticUI] ❌ Self-healing loop failed after ${MAX_SQL_RETRIES} attempts. Last error: ${lastError.message}`);
+    return null;
   }
 
   /**
@@ -32,40 +92,27 @@ class AgenticUIBackend {
     }
 
     let sqlData = null;
-    let sqlQuery = null;
 
-    // STAGE 1: If database integration is enabled, attempt to generate and run SQL
+    // STAGE 1: Attempt database query with Self-Healing Loop
     if (this.db && typeof this.db.executeQuery === "function") {
-      try {
-        console.log(`[AgenticUI] Analyzing prompt for SQL generation...`);
-        // Dynamically fetch schema if a function is provided, else fallback to static string
-        const schema = typeof this.db.getSchema === "function" ? await this.db.getSchema() : this.db.schema;
-        
-        if (schema) {
-          const result = await this.adapter.generateSql(prompt, schema, history);
-        
-        if (result && result.sql) {
-          sqlQuery = result.sql;
-          console.log(`[AgenticUI] Generated SQL: ${sqlQuery}`);
-          
-          // Execute SQL using the host application's callback (which should enforce RLS)
-          sqlData = await this.db.executeQuery(sqlQuery, authContext);
-          console.log(`[AgenticUI] SQL execution returned ${sqlData ? sqlData.length : 0} rows.`);
-        } else {
-          console.log(`[AgenticUI] No SQL generated (LLM decided frontend context is sufficient or question is general).`);
-        }
-      } catch (err) {
-        console.error("[AgenticUI] SQL Generation or Execution failed:", err.message);
-        // We log the error but proceed to Stage 2 anyway, falling back to frontend context
+      const schema = typeof this.db.getSchema === "function"
+        ? await this.db.getSchema()
+        : this.db.schema;
+
+      if (schema) {
+        // This loop will silently retry and self-correct on failure
+        sqlData = await this._executeWithSelfHealing(prompt, schema, history, authContext);
       }
     }
 
-    // STAGE 2: Generate the final summary and visualization spec
-    console.log(`[AgenticUI] Generating visualizations...`);
+    // STAGE 2: Generate final summary and visualization spec
+    // Whether sqlData is populated or null, the LLM generates the best response it can
+    console.log(`[AgenticUI] Generating visualizations from ${sqlData ? `${sqlData.rows.length} DB rows` : 'frontend context'}...`);
+
     const finalResponse = await this.adapter.chat("", history, {
       userPrompt: prompt,
       appContext: appContext,
-      sqlData: sqlData ? { query: sqlQuery, rows: sqlData } : null
+      sqlData: sqlData ? { query: sqlData.sql, rows: sqlData.rows } : null
     });
 
     return {

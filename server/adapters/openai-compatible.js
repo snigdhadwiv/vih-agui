@@ -218,11 +218,16 @@ IMPORTANT: Provide highly intelligent and concise answers. DO NOT use generic in
   return {
     name: "openai_compatible",
 
-    async generateSql(userPrompt, schema, historyMessages = []) {
+    async generateSql(userPrompt, schema, historyMessages = [], correctionHint = null) {
+      // On a retry, append the correction hint so the LLM knows exactly what went wrong
+      const userContent = correctionHint
+        ? `${userPrompt}\n\n[SELF-HEALING RETRY]: ${correctionHint}`
+        : userPrompt;
+
       const messages = [
-        { role: "system", content: `You are an expert SQL generator. Given a database schema, write a valid SQL query to answer the user's question.\nReply ONLY with a JSON object:\n{"sql": "SELECT ..."}\nIf the question does not require database data, reply with {"sql": null}.\n\nSchema:\n${schema}` },
+        { role: "system", content: `You are an expert SQL generator. Given a database schema, write a valid, read-only SQL SELECT query to answer the user's question.\nReply ONLY with a JSON object:\n{"sql": "SELECT ..."}\nIf the question does not require database data, reply with {"sql": null}.\nNEVER generate INSERT, UPDATE, DELETE, DROP, ALTER or any other mutating statement.\n\nSchema:\n${schema}` },
         ...historyMessages,
-        { role: "user", content: userPrompt }
+        { role: "user", content: userContent }
       ];
 
       const body = {
