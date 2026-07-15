@@ -80,12 +80,19 @@ function createOpenAICompatibleAdapter({ baseUrl, apiKey, model, rootDir }) {
 
   function buildSqlDataSummary(sqlData) {
     if (!sqlData) return "";
-    let s = `Database Query Executed: ${sqlData.query}\nRows Returned: ${sqlData.rows.length}\n`;
-    if (sqlData.rows.length > 0) {
-      // Show first 10 rows to save tokens
-      s += `Sample Data:\n${JSON.stringify(sqlData.rows.slice(0, 10))}`;
-    }
-    return s;
+    const { rows, query } = sqlData;
+    if (!rows || rows.length === 0) return `Database Query: ${query}\nRows returned: 0`;
+
+    // Dynamic Data Pagination: Only pass METADATA to the LLM, not the full dataset.
+    // The full rows are sent directly to the frontend, completely bypassing the context window.
+    const columns = Object.keys(rows[0]);
+    const sample  = rows.slice(0, 5); // 5 rows is enough for the LLM to understand the shape
+    return [
+      `Database Query Executed: ${query}`,
+      `Total Rows Returned: ${rows.length} (full dataset sent directly to frontend - do NOT embed data values)`,
+      `Columns: [${columns.join(", ")}]`,
+      `Sample (first 5 rows): ${JSON.stringify(sample)}`,
+    ].join("\n");
   }
 
 
@@ -99,8 +106,37 @@ function createOpenAICompatibleAdapter({ baseUrl, apiKey, model, rootDir }) {
     const isSmallCtx = contextLimit <= 3000;
     const outputBudget = Math.min(isSmallCtx ? 700 : 2000, contextLimit - OVERHEAD - 200);
     const promptBudget = contextLimit - outputBudget - OVERHEAD;
+    const hasSqlData = !!(sqlData && sqlData.rows && sqlData.rows.length > 0);
+    const columns = hasSqlData ? Object.keys(sqlData.rows[0]) : [];
 
-    const vizInstruction = `
+    const vizInstruction = hasSqlData ? `
+Reply with ONLY a JSON object (no markdown fences, no prose outside).
+The full dataset has already been sent to the frontend renderer — do NOT embed data values.
+Instead, reference columns by key so the frontend maps them automatically.
+
+Format for column-reference charts:
+{"summary":"one sentence insight","visualizations":[{
+  "id":"v1",
+  "type":"CHART_TYPE",
+  "title":"...",
+  "xKey":"COLUMN_NAME",
+  "yKey":"COLUMN_NAME",
+  "color":"#hex"
+}]}
+
+Available columns from the query result: [${columns.join(", ")}]
+
+CHART_TYPE options: bar_chart, line_chart, pie_chart, donut_chart, horizontal_bar_chart, stacked_bar_chart, grouped_bar_chart, area_chart, spline_chart, waterfall_chart, scatter_plot, funnel_chart, tree_map, kpi_cards, data_table, text_insight
+
+For kpi_cards (aggregates): use "cards":[{"label":"...","value":"COLUMN or computed","format":"currency|number|percent"}]
+For data_table: use "xKey" for label column, "yKey" for value column — frontend will map rows automatically
+For text_insight: use "content":"...","bullets":["..."]
+
+IMPORTANT: Use xKey/yKey with the EXACT column names from the available columns list above.
+IMPORTANT: DO NOT include a "data" array. The renderer will map it from the raw rows.
+IMPORTANT: Return 2-3 different chart types to show the data from multiple angles.
+IMPORTANT: Provide direct analytical insights in summary. No generic filler text.
+`.trim() : `
 Reply with ONLY a JSON object (no markdown fences, no prose outside):
 {"summary":"one sentence","visualizations":[{"id":"v1","type":"CHART_TYPE","title":"...","data":[{"label":"...","value":NUMBER}],"color":"#hex"}],"actions":[{"type":"navigate|scroll","url|target":"..."}]}
 
@@ -110,7 +146,6 @@ For kpi_cards: use "cards":[{"label":"...","value":"...","format":"currency|numb
 For data_table: use "columns":["..."],"rows":[[...]]
 For comparison: use "periods":[{"label":"...","metrics":[{"name":"...","value":NUMBER}]}]
 For text_insight: use "content":"...","bullets":["..."]
-For gauge: use "value":NUMBER,"max":NUMBER,"label":"..."
 
 IMPORTANT: For univariate/distribution requests, return 2-3 different chart types showing the same data.
 Set visualizations:null only if the request is completely unclear or doesn't need charts.

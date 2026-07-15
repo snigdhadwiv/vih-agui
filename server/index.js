@@ -276,6 +276,7 @@ app.post("/api/agentic-ui/stream", authMiddleware(), async (req, res) => {
       summary: out.summary || "Done.",
       visualizations: out.visualizations || null,
       actions: out.actions || null,
+      rawRows: out.rawRows || null,  // Full dataset — frontend maps this using xKey/yKey
     });
     res.write("data: [DONE]\n\n");
     res.end();

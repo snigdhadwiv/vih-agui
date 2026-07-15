@@ -1169,10 +1169,31 @@ class AnalyticsPanel {
   }
 
   /* ---- Open or update the panel ---- */
-  openOrUpdate(prompt, summary, visualizations) {
+  /* ---- Map raw DB rows to chart-ready {label, value} using xKey/yKey ---- */
+  _mapRows(visualizations, rawRows) {
+    if (!rawRows || !rawRows.length || !visualizations) return visualizations;
+    return visualizations.map(viz => {
+      if (!viz.xKey && !viz.yKey) return viz; // Already has embedded data or no mapping needed
+      const xKey = viz.xKey;
+      const yKey = viz.yKey;
+      // Map raw rows into standard {label, value} array
+      const data = rawRows.map(row => ({
+        label: String(row[xKey] ?? ''),
+        value: parseFloat(row[yKey]) || 0
+      }));
+      // Return the viz spec with the mapped data, removing the key references
+      const { xKey: _x, yKey: _y, ...rest } = viz;
+      return { ...rest, data };
+    });
+  }
+
+  openOrUpdate(prompt, summary, visualizations, streamingMode = false) {
     this._build();
-    this._history.push({ prompt, summary, visualizations: visualizations || [] });
-    this._loading = false;
+    if (!streamingMode) {
+      this._history.push({ prompt, summary, visualizations: visualizations || [] });
+    }
+    this._loading = streamingMode;
+    this._statusMsg = streamingMode ? 'Connecting to AI...' : null;
     this._renderPanel();
 
     if (!this._visible) {
@@ -1687,7 +1708,8 @@ class AgenticUIAgent extends HTMLElement {
           }
         });
       }
-      this._panel.openOrUpdate(prompt, data?.summary || "Done.", data?.visualizations || []);
+      const mappedViz = this._panel._mapRows(data?.visualizations || [], data?.rawRows);
+      this._panel.openOrUpdate(prompt, data?.summary || "Done.", mappedViz);
     } catch(err) {
       const msg = err.name==="TimeoutError"
         ? "Request timed out — LLM may be slow."
@@ -1740,7 +1762,8 @@ class AgenticUIAgent extends HTMLElement {
           }
         });
       }
-      this._panel.openOrUpdate(prompt, data?.summary || "Done.", data?.visualizations || []);
+      const mappedViz = this._panel._mapRows(data?.visualizations || [], data?.rawRows);
+      this._panel.openOrUpdate(prompt, data?.summary || "Done.", mappedViz);
     } catch(err) {
       this._panel.openOrUpdate(prompt, `Error: ${err.message}`, []);
     }

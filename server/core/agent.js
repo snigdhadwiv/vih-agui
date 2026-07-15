@@ -117,7 +117,8 @@ class AgenticUIBackend {
 
     return {
       summary: finalResponse.summary,
-      visualizations: finalResponse.visualizations
+      visualizations: finalResponse.visualizations,
+      rawRows: sqlData ? sqlData.rows : null  // Full dataset bypasses LLM — sent directly to frontend
     };
   }
 }
