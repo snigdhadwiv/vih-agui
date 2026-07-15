@@ -1189,7 +1189,20 @@ class AnalyticsPanel {
   /* ---- Show loading state inside panel while follow-up is fetching ---- */
   setLoading(isLoading) {
     this._loading = isLoading;
+    this._statusMsg = isLoading ? null : null; // reset status on load toggle
     if (this._el && this._visible) this._updateVizArea();
+  }
+
+  /* ---- Show a live streaming status bubble ---- */
+  setStatus(message) {
+    this._statusMsg = message;
+    // Find the status element if panel is open and update it in-place
+    if (this._el && this._visible) {
+      let statusEl = this._el.querySelector("#__au-status-msg__");
+      if (statusEl) {
+        statusEl.textContent = message;
+      }
+    }
   }
 
   /* ---- Close → slide panel back down ---- */
@@ -1428,13 +1441,19 @@ class AnalyticsPanel {
   }
 
   _spinnerHTML() {
+    const statusText = this._statusMsg || 'Connecting to AI...';
     return `<div style="grid-column:1/-1;display:flex;flex-direction:column;
       align-items:center;justify-content:center;padding:64px 0;gap:16px">
       <div style="display:flex;gap:8px">
         ${[0,150,300].map(d=>`<div style="width:10px;height:10px;border-radius:50%;
-          background:${C.accent};animation:au-pulse 1.2s ease-in-out ${d}ms infinite"></div>`).join("")}
+          background:${C.accent};animation:au-pulse 1.2s ease-in-out ${d}ms infinite"></div>`).join('')}
       </div>
-      <div style="color:${C.muted};font-size:13px">Generating visualizations…</div>
+      <div id="__au-status-msg__" style="color:${C.muted};font-size:13px;
+        display:flex;align-items:center;gap:6px">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+          background:${C.accent};animation:au-pulse 1s ease-in-out 75ms infinite"></span>
+        ${statusText}
+      </div>
     </div>
     <style>@keyframes au-pulse{0%,80%,100%{transform:scale(.5);opacity:.3}40%{transform:scale(1);opacity:1}}</style>`;
   }
@@ -1594,25 +1613,63 @@ class AgenticUIAgent extends HTMLElement {
     if (this._open) requestAnimationFrame(() => this._sq("textarea")?.focus());
   }
 
+  /* ---- Shared SSE streaming fetch ---- */
+  async _streamChat(prompt, history, onStatus, onDone, onError) {
+    const context = await this._scanner.scanWithData();
+    const res = await fetch(`${this.endpoint}/api/agentic-ui/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this._auth() },
+      signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({ prompt, history, context }),
+    });
+    if (!res.ok) throw new Error(`Server ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process each complete SSE line
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line for next chunk
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6).trim();
+        if (payload === "[DONE]") break;
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === "status") onStatus(evt.message);
+          if (evt.type === "done")   finalData = evt;
+        } catch (_) {}
+      }
+    }
+    return finalData;
+  }
+
   /* ---- Send from the mini bubble composer (first query) ---- */
   async _send(prompt) {
     if (!prompt.trim() || this._loading) return;
     this._loading = true;
     this._render();
 
+    // Open the panel immediately in streaming/status mode
+    this._panel.openOrUpdate(prompt, null, [], true /* streamingMode */);
+
     try {
-      const context = await this._scanner.scanWithData();
-      const res = await fetch(`${this.endpoint}/api/agentic-ui/chat`, {
-        method: "POST",
-        headers: {"Content-Type":"application/json",...this._auth()},
-        signal: AbortSignal.timeout(50000),
-        body: JSON.stringify({ prompt, history: [], context }),
-      });
-      if (!res.ok) throw new Error(`Server ${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const data = await this._streamChat(
+        prompt, [],
+        (msg) => this._panel.setStatus(msg),   // Live thought bubble
+        null,
+        null
+      );
       this._serverOk = true;
-            if (data.actions && Array.isArray(data.actions)) {
+      if (data && data.actions && Array.isArray(data.actions)) {
         data.actions.forEach(act => {
           if (act.type === 'navigate' && act.url) {
             if (window.__agenticUI && typeof window.__agenticUI.onNavigate === 'function') {
@@ -1630,14 +1687,13 @@ class AgenticUIAgent extends HTMLElement {
           }
         });
       }
-      this._panel.openOrUpdate(prompt, data.summary || "Done.", data.visualizations || []);
+      this._panel.openOrUpdate(prompt, data?.summary || "Done.", data?.visualizations || []);
     } catch(err) {
       const msg = err.name==="TimeoutError"
         ? "Request timed out — LLM may be slow."
         : err.message.includes("fetch")
         ? `Can't reach ${this.endpoint} — is the server running?`
         : err.message;
-      // Show error in mini panel
       this._errorMsg = msg;
       this._serverOk = false;
     }
@@ -1653,23 +1709,20 @@ class AgenticUIAgent extends HTMLElement {
     this._panel.setLoading(true);
 
     try {
-      const context = await this._scanner.scanWithData();
       const history = this._panel._history.slice(-6).map(h => ({
-        role: "user",   text: h.prompt,
+        role: "user",      text: h.prompt,
       })).concat(this._panel._history.slice(-6).map(h => ({
         role: "assistant", text: h.summary,
       })));
 
-      const res = await fetch(`${this.endpoint}/api/agentic-ui/chat`, {
-        method: "POST",
-        headers: {"Content-Type":"application/json",...this._auth()},
-        signal: AbortSignal.timeout(50000),
-        body: JSON.stringify({ prompt, history, context }),
-      });
-      if (!res.ok) throw new Error(`Server ${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-            if (data.actions && Array.isArray(data.actions)) {
+      const data = await this._streamChat(
+        prompt, history,
+        (msg) => this._panel.setStatus(msg),  // Live thought bubble
+        null,
+        null
+      );
+
+      if (data && data.actions && Array.isArray(data.actions)) {
         data.actions.forEach(act => {
           if (act.type === 'navigate' && act.url) {
             if (window.__agenticUI && typeof window.__agenticUI.onNavigate === 'function') {
@@ -1687,7 +1740,7 @@ class AgenticUIAgent extends HTMLElement {
           }
         });
       }
-      this._panel.openOrUpdate(prompt, data.summary || "Done.", data.visualizations || []);
+      this._panel.openOrUpdate(prompt, data?.summary || "Done.", data?.visualizations || []);
     } catch(err) {
       this._panel.openOrUpdate(prompt, `Error: ${err.message}`, []);
     }

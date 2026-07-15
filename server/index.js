@@ -201,6 +201,93 @@ app.post("/api/agentic-ui/chat", authMiddleware(), async (req, res) => {
   }
 });
 
+// ---- SSE Streaming endpoint ------------------------------------------
+// Accepts: { prompt, history, context }
+// Streams SSE events: { type: "status", message } then { type: "done", summary, visualizations }
+app.post("/api/agentic-ui/stream", authMiddleware(), async (req, res) => {
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const emit = (obj) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  };
+
+  try {
+    const { prompt, history = [], context } = req.body;
+    if (typeof prompt !== "string" || !prompt.trim()) throw new Error("Missing prompt");
+
+    if (MOCK) {
+      emit({ type: "status", message: "🤖 Running in mock mode..." });
+      await new Promise(r => setTimeout(r, 800));
+      const mock = mockResponse(prompt, context);
+      emit({ type: "done", summary: mock.summary, visualizations: mock.visualizations, actions: null });
+      res.write("data: [DONE]\n\n");
+      return res.end();
+    }
+
+    const historyMessages = history.map((h) => ({
+      role: h.role === "user" ? "user" : "assistant",
+      content: h.text,
+    }));
+    const authContext = { token: req.headers.authorization?.replace('Bearer ', '') };
+
+    // ---- Stage 1: Schema Introspection --------------------------------
+    if (backend.db && typeof backend.db.getSchema === "function") {
+      emit({ type: "status", message: "🔍 Scanning database schema..." });
+    } else {
+      emit({ type: "status", message: "🖥️  Reading dashboard context..." });
+    }
+
+    // Hook into the backend's self-healing loop to forward status events
+    const originalGenerateSql = backend.adapter.generateSql.bind(backend.adapter);
+    let sqlAttempt = 0;
+    backend.adapter.generateSql = async (userPrompt, schema, historyMsgs, correctionHint) => {
+      sqlAttempt++;
+      if (sqlAttempt === 1) {
+        emit({ type: "status", message: "⚡ Generating database query..." });
+      } else {
+        emit({ type: "status", message: `🔄 Self-healing SQL (attempt ${sqlAttempt})...` });
+      }
+      return originalGenerateSql(userPrompt, schema, historyMsgs, correctionHint);
+    };
+
+    // Also intercept query execution
+    if (backend.db) {
+      const originalExec = backend.db.executeQuery.bind(backend.db);
+      backend.db.executeQuery = async (sql, authCtx) => {
+        emit({ type: "status", message: "📊 Querying database..." });
+        const rows = await originalExec(sql, authCtx);
+        emit({ type: "status", message: `✅ Retrieved ${rows.length} records. Building charts...` });
+        return rows;
+      };
+    }
+
+    emit({ type: "status", message: "🧠 Asking AI to analyze your data..." });
+    const out = await backend.processChat(prompt, historyMessages, context || null, authContext);
+
+    // Restore original methods
+    backend.adapter.generateSql = originalGenerateSql;
+
+    emit({
+      type: "done",
+      summary: out.summary || "Done.",
+      visualizations: out.visualizations || null,
+      actions: out.actions || null,
+    });
+    res.write("data: [DONE]\n\n");
+    res.end();
+
+  } catch (err) {
+    console.error("[agentic-ui/stream error]", err.message);
+    emit({ type: "done", summary: `Error: ${err.message}`, visualizations: null });
+    res.write("data: [DONE]\n\n");
+    res.end();
+  }
+});
+
 // ---- Legacy apply endpoint (kept for backwards compatibility) --------
 // No longer the primary flow — viz-spec responses don't write to disk.
 app.post("/api/agentic-ui/apply", authMiddleware(), (req, res) => {
