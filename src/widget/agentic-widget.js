@@ -1585,14 +1585,66 @@ const BUBBLE_CSS = `
   .sdot.err{background:${C.rose}}
 `;
 
-const SUGGESTIONS = [
-  "Show revenue by day as a bar chart",
-  "Pie chart of orders by status",
-  "Generate executive KPI summary",
-  "Compare this week vs last week",
-  "Summarize this dashboard",
-  "Show all orders as a table",
-];
+/**
+ * Dynamically generate prompt suggestions based on what the plugin has
+ * scanned from the host application's live DOM, KPIs, and page context.
+ * Falls back to sensible generic prompts if no context is available yet.
+ */
+function generateSuggestions(ctx) {
+  const suggestions = [];
+
+  // Always include a summary prompt — works for any app
+  const pageLabel = ctx?.title
+    ? ctx.title.replace(/[\|\-–—].*$/, "").trim().slice(0, 40)
+    : "this page";
+  suggestions.push(`Summarize ${pageLabel}`);
+
+  // Generate KPI-specific prompts from what is visible on screen
+  if (ctx?.kpis?.length) {
+    const kpi = ctx.kpis[0];
+    if (kpi.label) {
+      suggestions.push(`Show ${kpi.label} trend over time`);
+      suggestions.push(`Break down ${kpi.label} by category`);
+    }
+    if (ctx.kpis.length > 1) {
+      suggestions.push(`Compare all ${ctx.kpis.length} metrics side by side`);
+    }
+  }
+
+  // Generate table-specific prompts from tables found in the DOM
+  if (ctx?.tables?.length) {
+    const tbl = ctx.tables[0];
+    const name = tbl.title || tbl.id || "the data";
+    suggestions.push(`Show ${name} as a chart`);
+    suggestions.push(`Which rows in ${name} have the highest values?`);
+  }
+
+  // URL/page-aware prompts
+  const url = (ctx?.url || "").toLowerCase();
+  if (url.includes("email") || url.includes("inbox") || url.includes("mail")) {
+    suggestions.push("Who sent the most emails this week?");
+    suggestions.push("Show email volume by day as a line chart");
+    suggestions.push("What are the top priority emails?");
+  } else if (url.includes("order") || url.includes("sales") || url.includes("revenue")) {
+    suggestions.push("Show revenue trend as a bar chart");
+    suggestions.push("Pie chart of orders by status");
+    suggestions.push("What are the top performing products?");
+  } else if (url.includes("user") || url.includes("customer") || url.includes("account")) {
+    suggestions.push("Show user growth over time");
+    suggestions.push("Which customers have the highest lifetime value?");
+  } else if (url.includes("dashboard") || url.includes("home") || url.includes("overview")) {
+    suggestions.push("Generate an executive KPI summary");
+    suggestions.push("What are the most important insights here?");
+  }
+
+  // De-duplicate and cap at 5 suggestions
+  const seen = new Set();
+  return suggestions.filter(s => {
+    if (seen.has(s)) return false;
+    seen.add(s);
+    return true;
+  }).slice(0, 5);
+}
 
 /* =====================================================================
    SECTION 6: MAIN CUSTOM ELEMENT
@@ -1606,10 +1658,13 @@ class AgenticUIAgent extends HTMLElement {
     this._serverOk = null;
     this._scanner  = new ContextScanner();
     this._panel    = new AnalyticsPanel(this);
+    this._ctx      = null; // cached live scan for suggestions
     this.attachShadow({ mode: "open" });
   }
 
   connectedCallback() {
+    // Run a quick non-async DOM scan immediately to populate smart suggestions
+    try { this._ctx = this._scanner.scan(); } catch (_) {}
     this.endpoint = (this.getAttribute("endpoint") || "http://localhost:4411").replace(/\/$/,"");
     this.token    = this.getAttribute("token") || null;
     this._render();
@@ -1795,7 +1850,7 @@ class AgenticUIAgent extends HTMLElement {
              </button>
            </div>`
         : `<div class="chips">
-             ${SUGGESTIONS.map(s=>`<button class="chip" data-chip="${esc(s)}">${esc(s)}</button>`).join("")}
+             ${generateSuggestions(this._ctx).map(s=>`<button class="chip" data-chip="${esc(s)}">${esc(s)}</button>`).join("")}
            </div>
            <div class="composer">
              <textarea placeholder="Ask anything about your dashboard data…"></textarea>
