@@ -1586,61 +1586,58 @@ const BUBBLE_CSS = `
 `;
 
 /**
- * Dynamically generate prompt suggestions based on what the plugin has
- * scanned from the host application's live DOM, KPIs, and page context.
- * Falls back to sensible generic prompts if no context is available yet.
+ * Generate prompt suggestions based PURELY on what the scanner found
+ * on the host application's live page — KPI labels, table names, chart
+ * titles. Zero hardcoded keywords. Works for any application.
  */
 function generateSuggestions(ctx) {
+  if (!ctx) return ["What insights can you find on this page?"];
+
   const suggestions = [];
 
-  // Always include a summary prompt — works for any app
-  const pageLabel = ctx?.title
-    ? ctx.title.replace(/[\|\-–—].*$/, "").trim().slice(0, 40)
-    : "this page";
-  suggestions.push(`Summarize ${pageLabel}`);
-
-  // Generate KPI-specific prompts from what is visible on screen
-  if (ctx?.kpis?.length) {
-    const kpi = ctx.kpis[0];
-    if (kpi.label) {
-      suggestions.push(`Show ${kpi.label} trend over time`);
-      suggestions.push(`Break down ${kpi.label} by category`);
-    }
+  // From real KPI labels found on screen
+  if (ctx.kpis?.length) {
+    ctx.kpis.slice(0, 3).forEach(kpi => {
+      if (kpi.label) {
+        suggestions.push(`Show ${kpi.label} as a chart`);
+        suggestions.push(`What is the trend for ${kpi.label}?`);
+      }
+    });
     if (ctx.kpis.length > 1) {
-      suggestions.push(`Compare all ${ctx.kpis.length} metrics side by side`);
+      suggestions.push(`Compare ${ctx.kpis.slice(0,2).map(k=>k.label).filter(Boolean).join(" and ")}`);
     }
   }
 
-  // Generate table-specific prompts from tables found in the DOM
-  if (ctx?.tables?.length) {
-    const tbl = ctx.tables[0];
-    const name = tbl.title || tbl.id || "the data";
-    suggestions.push(`Show ${name} as a chart`);
-    suggestions.push(`Which rows in ${name} have the highest values?`);
+  // From real table names/headers found in the DOM
+  if (ctx.tables?.length) {
+    ctx.tables.slice(0, 2).forEach(tbl => {
+      const name = tbl.title || tbl.id;
+      if (name) {
+        suggestions.push(`Visualize ${name} as a chart`);
+        suggestions.push(`What are the top entries in ${name}?`);
+      }
+    });
   }
 
-  // URL/page-aware prompts
-  const url = (ctx?.url || "").toLowerCase();
-  if (url.includes("email") || url.includes("inbox") || url.includes("mail")) {
-    suggestions.push("Who sent the most emails this week?");
-    suggestions.push("Show email volume by day as a line chart");
-    suggestions.push("What are the top priority emails?");
-  } else if (url.includes("order") || url.includes("sales") || url.includes("revenue")) {
-    suggestions.push("Show revenue trend as a bar chart");
-    suggestions.push("Pie chart of orders by status");
-    suggestions.push("What are the top performing products?");
-  } else if (url.includes("user") || url.includes("customer") || url.includes("account")) {
-    suggestions.push("Show user growth over time");
-    suggestions.push("Which customers have the highest lifetime value?");
-  } else if (url.includes("dashboard") || url.includes("home") || url.includes("overview")) {
-    suggestions.push("Generate an executive KPI summary");
-    suggestions.push("What are the most important insights here?");
+  // From real chart titles already on the page
+  if (ctx.charts?.length) {
+    ctx.charts.slice(0, 2).forEach(chart => {
+      const name = chart.title;
+      if (name) suggestions.push(`Give me a deeper breakdown of ${name}`);
+    });
   }
 
-  // De-duplicate and cap at 5 suggestions
+  // Universal fallback if the scan found nothing structural yet
+  if (suggestions.length === 0) {
+    suggestions.push("What data is available on this page?");
+    suggestions.push("Summarize what you can see here");
+    suggestions.push("Show all available data as charts");
+  }
+
+  // De-duplicate, filter empty, cap at 5
   const seen = new Set();
   return suggestions.filter(s => {
-    if (seen.has(s)) return false;
+    if (!s || seen.has(s)) return false;
     seen.add(s);
     return true;
   }).slice(0, 5);
